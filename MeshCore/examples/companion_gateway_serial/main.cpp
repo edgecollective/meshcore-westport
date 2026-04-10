@@ -38,7 +38,7 @@ StdRNG fast_rng;
 SimpleMeshTables tables;
 GatewayMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store);
 
-static char local_command[192];
+static char local_command[768];
 static unsigned long next_display_refresh = 0;
 
 static void halt() {

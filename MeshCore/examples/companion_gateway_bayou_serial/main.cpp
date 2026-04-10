@@ -32,7 +32,7 @@ StdRNG fast_rng;
 SimpleMeshTables tables;
 BayouGatewayMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store);
 
-static char local_command[192];
+static char local_command[768];
 static unsigned long next_display_refresh = 0;
 
 static void halt() {
@@ -125,7 +125,9 @@ static void handleLocalCommand() {
   if (strcmp(local_command, "!help") == 0) {
     Serial.println("!bayou status");
     Serial.println("!contact add <pubkey_hex> <name>");
+    Serial.println("!contact find <prefix>");
     Serial.println("!contact import <meshcore://card>");
+    Serial.println("!contact list");
     Serial.println("!self card");
     Serial.println("!self pubkey");
     return;
@@ -191,6 +193,26 @@ static void handleLocalCommand() {
     } else {
       Serial.println("ERR unable to import contact");
     }
+    return;
+  }
+
+  if (strcmp(local_command, "!contact list") == 0) {
+    the_mesh.printContactList(Serial);
+    return;
+  }
+
+  if (strncmp(local_command, "!contact find ", 14) == 0) {
+    char* prefix = &local_command[14];
+    while (*prefix == ' ') {
+      prefix++;
+    }
+
+    if (*prefix == 0) {
+      Serial.println("ERR missing prefix");
+      return;
+    }
+
+    the_mesh.printContactMatch(Serial, prefix);
     return;
   }
 

@@ -35,6 +35,47 @@ bool GatewayMesh::addContactFromHex(const char* pub_key_hex, const char* name) {
   return true;
 }
 
+bool GatewayMesh::printContactList(Stream& out) {
+  ContactInfo contact;
+  bool any = false;
+
+  for (int i = 0; getContactByIdx(i, contact); i++) {
+    char pub_hex[(PUB_KEY_SIZE * 2) + 1];
+    mesh::Utils::toHex(pub_hex, contact.id.pub_key, PUB_KEY_SIZE);
+    out.printf("%d %s %s\n", i, contact.name, pub_hex);
+    any = true;
+  }
+
+  if (!any) {
+    out.println("No contacts");
+  }
+  return any;
+}
+
+bool GatewayMesh::printContactMatch(Stream& out, const char* prefix) {
+  if (!prefix || *prefix == 0) {
+    return false;
+  }
+
+  ContactInfo contact;
+  bool any = false;
+  size_t prefix_len = strlen(prefix);
+
+  for (int i = 0; getContactByIdx(i, contact); i++) {
+    char pub_hex[(PUB_KEY_SIZE * 2) + 1];
+    mesh::Utils::toHex(pub_hex, contact.id.pub_key, PUB_KEY_SIZE);
+    if (strncmp(pub_hex, prefix, prefix_len) == 0 || strncmp(contact.name, prefix, prefix_len) == 0) {
+      out.printf("%d %s %s\n", i, contact.name, pub_hex);
+      any = true;
+    }
+  }
+
+  if (!any) {
+    out.println("No matching contacts");
+  }
+  return any;
+}
+
 bool GatewayMesh::printSelfCard(Stream& out) {
   NodePrefs* prefs = getNodePrefs();
   mesh::Packet* pkt;

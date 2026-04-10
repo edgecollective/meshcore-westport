@@ -10,6 +10,8 @@ public:
   GatewayMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTCClock& rtc, SimpleMeshTables& tables, DataStore& store);
 
   bool addContactFromHex(const char* pub_key_hex, const char* name);
+  bool printContactList(Stream& out);
+  bool printContactMatch(Stream& out, const char* prefix);
   bool printSelfCard(Stream& out);
   bool importContactCard(const char* encoded);
   bool hasLastUpload() const { return has_last_upload; }
