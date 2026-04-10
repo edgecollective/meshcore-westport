@@ -49,6 +49,18 @@ static void halt() {
   while (1) ;
 }
 
+static void formatElapsed(unsigned long seconds, char* out, size_t out_len) {
+  if (seconds < 60) {
+    snprintf(out, out_len, "%lus", seconds);
+  } else if (seconds < 3600) {
+    snprintf(out, out_len, "%lum", seconds / 60);
+  } else if (seconds < 86400) {
+    snprintf(out, out_len, "%luh", seconds / 3600);
+  } else {
+    snprintf(out, out_len, "%lud", seconds / 86400);
+  }
+}
+
 #ifdef DISPLAY_CLASS
 static void renderStatusScreen() {
   if (millis() < next_display_refresh) {
@@ -64,7 +76,9 @@ static void renderStatusScreen() {
 
   char line[48];
   display.setCursor(0, 24);
-  snprintf(line, sizeof(line), "Next: %lus", (unsigned long)the_mesh.getSecondsUntilNextSend());
+  char elapsed[12];
+  formatElapsed(the_mesh.getSecondsUntilNextSend(), elapsed, sizeof(elapsed));
+  snprintf(line, sizeof(line), "Next: %s", elapsed);
   display.print(line);
 
   snprintf(line, sizeof(line), "T:%.1f B:%.1f",

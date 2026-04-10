@@ -39,6 +39,18 @@ static void halt() {
   while (1) ;
 }
 
+static void formatElapsed(unsigned long seconds, char* out, size_t out_len) {
+  if (seconds < 60) {
+    snprintf(out, out_len, "%lus", seconds);
+  } else if (seconds < 3600) {
+    snprintf(out, out_len, "%lum", seconds / 60);
+  } else if (seconds < 86400) {
+    snprintf(out, out_len, "%luh", seconds / 3600);
+  } else {
+    snprintf(out, out_len, "%lud", seconds / 86400);
+  }
+}
+
 #ifdef DISPLAY_CLASS
 static void renderStatusScreen() {
   if (millis() < next_display_refresh) {
@@ -56,7 +68,9 @@ static void renderStatusScreen() {
   display.print(line);
 
   if (strcmp(the_mesh.getLastPostStatus(), "post ok") == 0 && the_mesh.hasSuccessfulPost()) {
-    snprintf(line, sizeof(line), "Post: ok %lus ago", the_mesh.getSecondsSinceSuccessfulPost());
+    char elapsed[12];
+    formatElapsed(the_mesh.getSecondsSinceSuccessfulPost(), elapsed, sizeof(elapsed));
+    snprintf(line, sizeof(line), "Post: ok %s ago", elapsed);
   } else {
     snprintf(line, sizeof(line), "Post: %s", the_mesh.getLastPostStatus());
   }
