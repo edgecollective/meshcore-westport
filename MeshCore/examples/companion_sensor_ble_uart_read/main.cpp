@@ -238,6 +238,10 @@ static void handleLocalCommand() {
   }
 
   if (strcmp(local_command, "!uart show") == 0) {
+    Serial.printf("status=%s detail=%s raw=%s\n",
+                  the_mesh.getLastStatus(),
+                  the_mesh.getLastUartDetail(),
+                  the_mesh.getLastUartLine()[0] ? the_mesh.getLastUartLine() : "<none>");
     if (!the_mesh.hasFreshSample()) {
       Serial.println("ERR no fresh uart sample");
       return;

@@ -349,3 +349,232 @@ What is not done yet:
 5. Press the sender button and confirm that it causes an immediate upload outside the normal 20-second cadence.
 6. Then verify uploads through one repeater.
 7. If multi-hop succeeds, add Wi-Fi forwarding on top of the gateway path.
+
+## Bayou Gateway Work
+
+Added a new Wi-Fi posting gateway variant:
+
+- `MeshCore/examples/companion_gateway_bayou_serial`
+
+Purpose:
+
+- receive MeshCore telemetry over RF like the serial gateway
+- connect to Wi-Fi
+- POST decoded telemetry to Bayou
+- show compact Wi-Fi, Bayou, and telemetry status on the Heltec OLED
+
+Added Heltec v3 build target:
+
+- `Heltec_v3_companion_gateway_bayou_serial`
+
+### Bayou gateway configuration changes
+
+The Bayou gateway originally carried Wi-Fi and Bayou credentials in tracked PlatformIO build flags.
+This was changed so live credentials live only in a local header:
+
+- live local file:
+  `MeshCore/examples/companion_gateway_bayou_serial/secrets.h`
+- checked-in template:
+  `MeshCore/examples/companion_gateway_bayou_serial/secrets.example.h`
+- ignored by git in:
+  `.gitignore`
+
+Configured local values:
+
+- `WIFI_SSID`: `nebo-nuthouse`
+- `WIFI_PWD`: `spacecat`
+- `BAYOU_PUBLIC_KEY`: `digpudphgqj9`
+- `BAYOU_PRIVATE_KEY`: `3e3qk844e6gc`
+
+### Bayou posting behavior
+
+The gateway now posts JSON shaped for Bayou with:
+
+- `private_key`
+- `node_id`
+- `temperature_c`
+- `battery_volts`
+
+Important corrections made:
+
+1. `battery_volts` is posted under exactly that field name.
+2. `distance_meters` was removed and replaced with `temperature_c`.
+3. the Bayou URL was switched from HTTP to HTTPS to avoid a `301` redirect failure.
+4. redirect following was enabled as an extra safeguard.
+
+### Bayou gateway OLED behavior
+
+The Bayou gateway display was compressed to fit the small Heltec screen.
+
+Current display intent:
+
+- title line: `Bayou GW`
+- Wi-Fi state line: `WiFi: ...`
+- Bayou post line: `Post: ...`
+- sender line: `From: ...` or `No sensor data`
+- condensed data line: `N:<node_id> T:<temperature_c> B:<battery_volts>`
+- route line: `R:<relay> H:<hops>`
+
+Later improvement:
+
+- after a successful post, the display now shows:
+  `Post: ok <Ns ago>`
+- that age updates live as time passes since the last successful Bayou POST
+
+### Bayou gateway route display
+
+The receiver/gateway display was updated to show route details from the received RF packet:
+
+- sender name
+- relay
+- hops
+
+Interpretation:
+
+- `relay` is the last repeater hash carried in the received path
+- if no repeater participated, the relay shows `direct`
+- `hops` comes from the received path hash count
+
+### Bayou gateway build and flash status
+
+Latest verified build:
+
+- `pio run -e Heltec_v3_companion_gateway_bayou_serial`
+  - SUCCESS
+  - RAM: 38.9%
+  - Flash: 35.9%
+
+Latest verified flash:
+
+- `pio run -e Heltec_v3_companion_gateway_bayou_serial -t upload --upload-port /dev/ttyUSB1`
+  - SUCCESS
+  - duration about 2m 5s
+
+Current hardware state:
+
+- the Bayou gateway is flashed on `/dev/ttyUSB1`
+- it should now show Wi-Fi status, Bayou post status, sender identity, condensed telemetry, relay, and hops
+
+## Sender Telemetry Payload Work
+
+The sender telemetry payload was extended beyond battery-only reporting.
+
+### Node ID support
+
+The sender now persists and transmits a `node_id`.
+
+Local sender serial commands:
+
+- `!nodeid show`
+- `!nodeid set <number>`
+
+Behavior:
+
+- `node_id` is stored persistently on the sender
+- the sender includes `node_id` in every telemetry upload
+- gateways that understand the newer payload forward the real `node_id`
+- older sender firmware will still be accepted by the gateway, with fallback `node_id = 0`
+
+### 1-wire temperature support
+
+The sender now includes support for a 1-wire temperature sensor.
+
+Electrical assumptions:
+
+- sensor data line on `GPIO7`
+- sensor power on `GPIO6`
+
+Behavior:
+
+1. the sender powers the sensor from `GPIO6`
+2. it reads temperature over 1-wire on `GPIO7`
+3. if the sensor does not respond, it power-cycles `GPIO6`
+4. it retries the read after the reset
+5. if the sensor still does not respond, it sends placeholder temperature `-40.0 C`
+
+Implementation notes:
+
+- `OneWire` library added
+- `DallasTemperature` library added
+- sender payload version increased to carry:
+  - battery millivolts
+  - interval seconds
+  - `node_id`
+  - `temperature_x10`
+
+The gateway parser and Bayou gateway were updated to understand both:
+
+- old payloads without temperature
+- new payloads with `node_id` and `temperature_x10`
+
+### Temperature to Bayou mapping
+
+The end-to-end intent is now implemented as:
+
+- sender reads sensor temperature
+- sender transmits `temperature_x10`
+- Bayou gateway converts this to `temperature_c`
+- Bayou POST sends the real `temperature_c` field
+
+If the sender is running older firmware or the sensor cannot be read:
+
+- `temperature_c` will currently resolve to `-40.0`
+
+### Sender display update
+
+The sender OLED was also updated so its compact status line now includes temperature and battery instead of battery alone.
+
+Current sender condensed data style:
+
+- `T:<temp> B:<volts>`
+
+### Sender build status
+
+Latest verified build:
+
+- `pio run -e Heltec_v3_companion_sensor_ble`
+  - SUCCESS
+  - RAM: 41.5%
+  - Flash: 37.6%
+
+At the close of this round:
+
+- the updated sender firmware builds successfully with `OneWire` and `DallasTemperature`
+- the Bayou gateway has already been reflashed with the matching parser
+- the next hardware step is to flash the sender and then set its desired node id with:
+  `!nodeid set <number>`
+
+## Current State After Bayou And Temperature Work
+
+What is done now in addition to the earlier bring-up work:
+
+- Bayou Wi-Fi gateway variant added
+- Bayou credentials moved out of tracked config into local `secrets.h`
+- Bayou POST uses `private_key`, `node_id`, `temperature_c`, and `battery_volts`
+- Bayou gateway display now shows Wi-Fi state and POST success age
+- sender now persists and transmits `node_id`
+- sender now supports a 1-wire temperature sensor on `GPIO7`
+- sender can power-cycle the sensor using `GPIO6`
+- sender now sends placeholder `-40.0 C` if the temperature sensor still fails after reset
+- gateway parser and Bayou gateway now accept the new temperature-bearing payload
+- Bayou gateway has been rebuilt and reflashed successfully
+- sender temperature-capable firmware now builds successfully
+
+## Recommended Next Steps After This Round
+
+1. Flash the updated sender firmware to the sender board.
+2. On the sender serial console, set the intended node id:
+   `!nodeid set <number>`
+3. Connect the 1-wire sensor:
+   data to `GPIO7`, power to `GPIO6`
+4. Confirm the sender OLED shows temperature and battery.
+5. Confirm the gateway OLED shows:
+   - sender
+   - `N/T/B`
+   - relay
+   - hops
+6. Confirm Bayou posts now contain:
+   - real `battery_volts`
+   - real `node_id`
+   - real `temperature_c`
+7. Then repeat the test through a repeater and compare the displayed hop information.

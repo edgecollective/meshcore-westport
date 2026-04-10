@@ -41,6 +41,8 @@ public:
   bool hasFreshSample() const;
   const uint8_t* getTargetPubKey() const { return target_pub_key; }
   const char* getLastStatus() const { return last_status; }
+  const char* getLastUartLine() const { return last_uart_line; }
+  const char* getLastUartDetail() const { return last_uart_detail; }
   uint16_t getLastBatteryMv() const { return last_battery_mv; }
   int16_t getLastTemperatureX10() const { return last_temperature_x10; }
   uint16_t getLastNodeId() const { return node_id; }
@@ -76,5 +78,7 @@ private:
   bool uart_line_discard;
   uint8_t uart_line_len;
   char last_status[32];
+  char last_uart_detail[48];
+  char last_uart_line[UART_READ_LINE_MAX];
   char uart_line[UART_READ_LINE_MAX];
 };

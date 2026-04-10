@@ -21,7 +21,9 @@ UartReadSenderMesh::UartReadSenderMesh(mesh::Radio& radio, mesh::RNG& rng, mesh:
     awaiting_response(false), retry_pending(false), sample_valid(false), uart_line_discard(false), uart_line_len(0) {
   memset(target_pub_key, 0, sizeof(target_pub_key));
   memset(uart_line, 0, sizeof(uart_line));
+  memset(last_uart_line, 0, sizeof(last_uart_line));
   StrHelper::strncpy(last_status, "boot", sizeof(last_status));
+  StrHelper::strncpy(last_uart_detail, "none", sizeof(last_uart_detail));
 }
 
 void UartReadSenderMesh::begin(bool has_display) {
@@ -98,6 +100,9 @@ void UartReadSenderMesh::pollUart(Stream& in) {
     if (c == '\n') {
       if (!uart_line_discard && uart_line_len > 0) {
         uart_line[uart_line_len] = 0;
+        StrHelper::strncpy(last_uart_line, uart_line, sizeof(last_uart_line));
+        Serial.print("UART RX: ");
+        Serial.println(last_uart_line);
 
         uint16_t parsed_node_id = 0;
         int16_t parsed_temp_x10 = 0;
@@ -109,8 +114,17 @@ void UartReadSenderMesh::pollUart(Stream& in) {
           last_uart_sample_at = millis();
           sample_valid = true;
           StrHelper::strncpy(last_status, "uart ok", sizeof(last_status));
+          snprintf(last_uart_detail, sizeof(last_uart_detail),
+                   "ok n=%u t=%.1f b=%.3f",
+                   (unsigned)node_id,
+                   ((double)last_temperature_x10) / 10.0,
+                   ((double)last_battery_mv) / 1000.0);
+          Serial.print("UART OK: ");
+          Serial.println(last_uart_detail);
         } else {
           StrHelper::strncpy(last_status, "uart bad", sizeof(last_status));
+          Serial.print("UART BAD: ");
+          Serial.println(last_uart_detail);
         }
       }
 
@@ -126,6 +140,13 @@ void UartReadSenderMesh::pollUart(Stream& in) {
     if (!isStrictPrintable(c) || uart_line_len >= (UART_READ_LINE_MAX - 1)) {
       uart_line_discard = true;
       StrHelper::strncpy(last_status, "uart drop", sizeof(last_status));
+      if (!isStrictPrintable(c)) {
+        snprintf(last_uart_detail, sizeof(last_uart_detail), "drop nonprint 0x%02X", (unsigned)(uint8_t)c);
+      } else {
+        snprintf(last_uart_detail, sizeof(last_uart_detail), "drop too long >=%u", (unsigned)(UART_READ_LINE_MAX - 1));
+      }
+      Serial.print("UART DROP: ");
+      Serial.println(last_uart_detail);
       continue;
     }
 
@@ -330,32 +351,38 @@ bool UartReadSenderMesh::ensureTargetContact() {
 
 bool UartReadSenderMesh::parseUartLine(const char* line, uint16_t& parsed_node_id, int16_t& parsed_temp_x10, uint16_t& parsed_battery_mv) {
   if (!line || strncmp(line, "MC,N=", 5) != 0) {
+    StrHelper::strncpy(last_uart_detail, "expected MC,N=", sizeof(last_uart_detail));
     return false;
   }
 
   char* end = NULL;
   unsigned long node = strtoul(line + 5, &end, 10);
   if (!end || end == line + 5 || node > 65535 || strncmp(end, ",T=", 3) != 0) {
+    StrHelper::strncpy(last_uart_detail, "bad node or missing ,T=", sizeof(last_uart_detail));
     return false;
   }
 
   char* temp_end = NULL;
   float temp_c = strtof(end + 3, &temp_end);
   if (!temp_end || temp_end == end + 3 || strncmp(temp_end, ",B=", 3) != 0) {
+    StrHelper::strncpy(last_uart_detail, "bad temp or missing ,B=", sizeof(last_uart_detail));
     return false;
   }
 
   char* batt_end = NULL;
   float batt_v = strtof(temp_end + 3, &batt_end);
   if (!batt_end || batt_end == temp_end + 3 || *batt_end != 0) {
+    StrHelper::strncpy(last_uart_detail, "bad battery field", sizeof(last_uart_detail));
     return false;
   }
 
   if (temp_c < -100.0f || temp_c > 150.0f) {
+    StrHelper::strncpy(last_uart_detail, "temp out of range", sizeof(last_uart_detail));
     return false;
   }
 
   if (batt_v < 2.0f || batt_v > 6.0f) {
+    StrHelper::strncpy(last_uart_detail, "battery out of range", sizeof(last_uart_detail));
     return false;
   }
 
