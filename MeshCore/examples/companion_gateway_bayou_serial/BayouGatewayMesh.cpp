@@ -45,13 +45,13 @@ void BayouGatewayMesh::serviceBayou() {
   }
 }
 
-void BayouGatewayMesh::onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id) {
+void BayouGatewayMesh::onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id, int16_t temperature_x10) {
   (void)contact;
   (void)interval_secs;
 
   pending_node_id = node_id;
   pending_battery_mv = battery_mv;
-  last_upload_temperature_c = 0.0f;
+  last_upload_temperature_c = ((float)temperature_x10) / 10.0f;
   post_pending = true;
   next_post_retry_at = millis();
   StrHelper::strncpy(last_post_status, "post queued", sizeof(last_post_status));
@@ -123,8 +123,8 @@ bool BayouGatewayMesh::postPendingUpload() {
 
   char body[192];
   snprintf(body, sizeof(body),
-           "{\"private_key\":\"%s\",\"node_id\":%u,\"temperature_c\":0.0,\"battery_volts\":%.3f}",
-           BAYOU_PRIVATE_KEY, (unsigned)pending_node_id, battery_volts);
+           "{\"private_key\":\"%s\",\"node_id\":%u,\"temperature_c\":%.1f,\"battery_volts\":%.3f}",
+           BAYOU_PRIVATE_KEY, (unsigned)pending_node_id, (double)last_upload_temperature_c, battery_volts);
 
   if (!http.begin(url)) {
     StrHelper::strncpy(last_post_status, "http begin fail", sizeof(last_post_status));

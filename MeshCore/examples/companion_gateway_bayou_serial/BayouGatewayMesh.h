@@ -28,7 +28,7 @@ public:
   float getLastUploadTemperatureC() const { return last_upload_temperature_c; }
 
 protected:
-  void onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id) override;
+  void onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id, int16_t temperature_x10) override;
 
 private:
   bool ensureWifiConnected();

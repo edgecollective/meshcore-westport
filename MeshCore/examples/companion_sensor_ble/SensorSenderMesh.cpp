@@ -16,7 +16,9 @@ constexpr uint8_t NODE_ID_KEY[] = {
 
 SensorSenderMesh::SensorSenderMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTCClock& rtc, SimpleMeshTables& tables, DataStore& store)
   : MyMesh(radio, rng, rtc, tables, store), next_send_at(0), response_deadline(0),
-    last_request_tag(0), last_battery_mv(0), node_id(SENSOR_NODE_ID), target_valid(false), awaiting_response(false), retry_pending(false) {
+    last_request_tag(0), last_battery_mv(0), last_temperature_x10(SENSOR_TEMP_PLACEHOLDER_X10),
+    node_id(SENSOR_NODE_ID), target_valid(false), awaiting_response(false), retry_pending(false),
+    one_wire(SENSOR_ONEWIRE_DATA_PIN), temp_sensors(&one_wire) {
   memset(target_pub_key, 0, sizeof(target_pub_key));
   StrHelper::strncpy(last_status, "boot", sizeof(last_status));
 }
@@ -24,6 +26,11 @@ SensorSenderMesh::SensorSenderMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTC
 void SensorSenderMesh::begin(bool has_display) {
   MyMesh::begin(has_display);
   restoreStoredNodeId();
+  pinMode(SENSOR_ONEWIRE_POWER_PIN, OUTPUT);
+  digitalWrite(SENSOR_ONEWIRE_POWER_PIN, HIGH);
+  delay(100);
+  temp_sensors.begin();
+  temp_sensors.setWaitForConversion(true);
 
   if (strlen(SENSOR_TARGET_PUB_KEY) == PUB_KEY_SIZE * 2) {
     mesh::Utils::fromHex(target_pub_key, PUB_KEY_SIZE, SENSOR_TARGET_PUB_KEY);
@@ -293,6 +300,40 @@ bool SensorSenderMesh::ensureTargetContact() {
   return true;
 }
 
+int16_t SensorSenderMesh::readTemperatureX10() {
+  int16_t temp_x10 = SENSOR_TEMP_PLACEHOLDER_X10;
+  if (tryReadTemperatureX10(temp_x10)) {
+    return temp_x10;
+  }
+
+  resetTemperatureSensorPower();
+  if (tryReadTemperatureX10(temp_x10)) {
+    return temp_x10;
+  }
+
+  return SENSOR_TEMP_PLACEHOLDER_X10;
+}
+
+bool SensorSenderMesh::tryReadTemperatureX10(int16_t& out_temp_x10) {
+  temp_sensors.begin();
+  temp_sensors.requestTemperatures();
+  float temp_c = temp_sensors.getTempCByIndex(0);
+
+  if (temp_c == DEVICE_DISCONNECTED_C || temp_c < -100.0f || temp_c > 150.0f) {
+    return false;
+  }
+
+  out_temp_x10 = (int16_t)lroundf(temp_c * 10.0f);
+  return true;
+}
+
+void SensorSenderMesh::resetTemperatureSensorPower() {
+  digitalWrite(SENSOR_ONEWIRE_POWER_PIN, LOW);
+  delay(250);
+  digitalWrite(SENSOR_ONEWIRE_POWER_PIN, HIGH);
+  delay(250);
+}
+
 bool SensorSenderMesh::sendSensorUpload(bool force_flood) {
   if (!ensureTargetContact()) {
     return false;
@@ -303,9 +344,9 @@ bool SensorSenderMesh::sendSensorUpload(bool force_flood) {
     return false;
   }
 
-  uint8_t req_data[8];
+  uint8_t req_data[10];
   req_data[0] = REQ_TYPE_SENSOR_UPLOAD;
-  req_data[1] = 1;
+  req_data[1] = 2;
 
   last_battery_mv = board.getBattMilliVolts();
   memcpy(&req_data[2], &last_battery_mv, sizeof(last_battery_mv));
@@ -313,6 +354,8 @@ bool SensorSenderMesh::sendSensorUpload(bool force_flood) {
   uint16_t interval_secs = TELEMETRY_INTERVAL_SECS;
   memcpy(&req_data[4], &interval_secs, sizeof(interval_secs));
   memcpy(&req_data[6], &node_id, sizeof(node_id));
+  last_temperature_x10 = readTemperatureX10();
+  memcpy(&req_data[8], &last_temperature_x10, sizeof(last_temperature_x10));
 
   last_request_tag = getRTCClock()->getCurrentTimeUnique();
 

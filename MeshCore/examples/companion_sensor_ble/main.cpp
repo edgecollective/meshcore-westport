@@ -63,19 +63,17 @@ static void renderStatusScreen() {
   display.print(the_mesh.hasTarget() ? "Target: set" : "Target: none");
 
   char line[48];
-  snprintf(line, sizeof(line), "Every: %us", (unsigned)TELEMETRY_INTERVAL_SECS);
   display.setCursor(0, 24);
+  snprintf(line, sizeof(line), "Next: %lus", (unsigned long)the_mesh.getSecondsUntilNextSend());
   display.print(line);
 
-  snprintf(line, sizeof(line), "Next: %lus", (unsigned long)the_mesh.getSecondsUntilNextSend());
+  snprintf(line, sizeof(line), "T:%.1f B:%.1f",
+           ((double)the_mesh.getLastTemperatureX10()) / 10.0,
+           ((double)the_mesh.getLastBatteryMv()) / 1000.0);
   display.setCursor(0, 36);
   display.print(line);
 
-  snprintf(line, sizeof(line), "Batt: %umV", (unsigned)the_mesh.getLastBatteryMv());
   display.setCursor(0, 48);
-  display.print(line);
-
-  display.setCursor(0, 60);
   display.print(the_mesh.getLastStatus());
   display.endFrame();
 }

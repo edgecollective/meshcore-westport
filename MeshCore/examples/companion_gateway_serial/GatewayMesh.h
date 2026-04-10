@@ -16,19 +16,21 @@ public:
   const char* getLastUploadName() const { return last_upload_name; }
   uint16_t getLastUploadBatteryMv() const { return last_upload_battery_mv; }
   uint16_t getLastUploadNodeId() const { return last_upload_node_id; }
+  int16_t getLastUploadTemperatureX10() const { return last_upload_temperature_x10; }
   const char* getLastUploadRelay() const { return last_upload_relay; }
   uint8_t getLastUploadHops() const { return last_upload_hops; }
 
 protected:
   void onPeerDataRecv(mesh::Packet* packet, uint8_t type, int sender_idx, const uint8_t* secret, uint8_t* data, size_t len) override;
   uint8_t onContactRequest(const ContactInfo& contact, uint32_t sender_timestamp, const uint8_t* data, uint8_t len, uint8_t* reply) override;
-  virtual void onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id);
+  virtual void onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id, int16_t temperature_x10);
 
 private:
   char last_upload_name[sizeof(ContactInfo::name)];
   char last_upload_relay[16];
   uint16_t last_upload_battery_mv;
   uint16_t last_upload_node_id;
+  int16_t last_upload_temperature_x10;
   uint8_t last_upload_hops;
   bool has_last_upload;
 };

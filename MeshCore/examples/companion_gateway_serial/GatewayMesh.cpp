@@ -14,6 +14,7 @@ GatewayMesh::GatewayMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTCClock& rtc
   StrHelper::strncpy(last_upload_relay, "-", sizeof(last_upload_relay));
   last_upload_battery_mv = 0;
   last_upload_node_id = 0;
+  last_upload_temperature_x10 = -400;
   last_upload_hops = 0;
   has_last_upload = false;
 }
@@ -105,21 +106,27 @@ uint8_t GatewayMesh::onContactRequest(const ContactInfo& contact, uint32_t sende
     uint16_t battery_mv = 0;
     uint16_t interval_secs = 0;
     uint16_t node_id = 0;
+    int16_t temperature_x10 = -400;
+    uint8_t version = data[1];
     memcpy(&battery_mv, &data[2], sizeof(battery_mv));
     memcpy(&interval_secs, &data[4], sizeof(interval_secs));
     if (len >= 8) {
       memcpy(&node_id, &data[6], sizeof(node_id));
     }
+    if (version >= 2 && len >= 10) {
+      memcpy(&temperature_x10, &data[8], sizeof(temperature_x10));
+    }
 
     StrHelper::strncpy(last_upload_name, contact.name, sizeof(last_upload_name));
     last_upload_battery_mv = battery_mv;
     last_upload_node_id = node_id;
+    last_upload_temperature_x10 = temperature_x10;
     has_last_upload = true;
 
-    onSensorUploadReceived(contact, battery_mv, interval_secs, node_id);
+    onSensorUploadReceived(contact, battery_mv, interval_secs, node_id, temperature_x10);
 
-    Serial.printf("sensor_upload from=%s node_id=%u battery_mv=%u relay=%s hops=%u\n",
-                  contact.name, (unsigned)node_id, battery_mv, last_upload_relay, (unsigned)last_upload_hops);
+    Serial.printf("sensor_upload from=%s node_id=%u temp_x10=%d battery_mv=%u relay=%s hops=%u\n",
+                  contact.name, (unsigned)node_id, (int)temperature_x10, battery_mv, last_upload_relay, (unsigned)last_upload_hops);
 
     memcpy(reply, &sender_timestamp, 4);
     reply[4] = 0;
@@ -129,9 +136,10 @@ uint8_t GatewayMesh::onContactRequest(const ContactInfo& contact, uint32_t sende
   return MyMesh::onContactRequest(contact, sender_timestamp, data, len, reply);
 }
 
-void GatewayMesh::onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id) {
+void GatewayMesh::onSensorUploadReceived(const ContactInfo& contact, uint16_t battery_mv, uint16_t interval_secs, uint16_t node_id, int16_t temperature_x10) {
   (void)contact;
   (void)battery_mv;
   (void)interval_secs;
   (void)node_id;
+  (void)temperature_x10;
 }
