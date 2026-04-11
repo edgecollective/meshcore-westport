@@ -43,6 +43,10 @@ public:
   const char* getLastStatus() const { return last_status; }
   const char* getLastUartLine() const { return last_uart_line; }
   const char* getLastUartDetail() const { return last_uart_detail; }
+  uint32_t getRawUartByteCount() const { return raw_uart_byte_count; }
+  uint8_t getLastRawUartByte() const { return last_raw_uart_byte; }
+  bool hasSeenRawUartBytes() const { return raw_uart_byte_count > 0; }
+  uint32_t getSecondsSinceLastRawUartByte() const;
   uint16_t getLastBatteryMv() const { return last_battery_mv; }
   int16_t getLastTemperatureX10() const { return last_temperature_x10; }
   uint16_t getLastNodeId() const { return node_id; }
@@ -67,10 +71,13 @@ private:
   unsigned long next_send_at;
   unsigned long response_deadline;
   unsigned long last_uart_sample_at;
+  unsigned long last_raw_uart_byte_at;
   uint32_t last_request_tag;
+  uint32_t raw_uart_byte_count;
   uint16_t last_battery_mv;
   int16_t last_temperature_x10;
   uint16_t node_id;
+  uint8_t last_raw_uart_byte;
   bool target_valid;
   bool awaiting_response;
   bool retry_pending;

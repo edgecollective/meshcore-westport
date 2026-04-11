@@ -8,11 +8,15 @@
 #endif
 
 #ifndef UART_READ_RX_PIN
-#define UART_READ_RX_PIN 19
+#define UART_READ_RX_PIN 47
 #endif
 
 #ifndef UART_READ_BAUD
 #define UART_READ_BAUD 9600
+#endif
+
+#ifndef UART_READ_TX_PIN
+#define UART_READ_TX_PIN 45
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -166,6 +170,7 @@ static void handleLocalCommand() {
     Serial.println("!target clear");
     Serial.println("!target show");
     Serial.println("!uart show");
+    Serial.println("!uart loop");
     return;
   }
 
@@ -238,10 +243,13 @@ static void handleLocalCommand() {
   }
 
   if (strcmp(local_command, "!uart show") == 0) {
-    Serial.printf("status=%s detail=%s raw=%s\n",
+    Serial.printf("status=%s detail=%s raw=%s bytes=%lu last_byte=0x%02X byte_age_s=%lu\n",
                   the_mesh.getLastStatus(),
                   the_mesh.getLastUartDetail(),
-                  the_mesh.getLastUartLine()[0] ? the_mesh.getLastUartLine() : "<none>");
+                  the_mesh.getLastUartLine()[0] ? the_mesh.getLastUartLine() : "<none>",
+                  (unsigned long)the_mesh.getRawUartByteCount(),
+                  (unsigned)the_mesh.getLastRawUartByte(),
+                  (unsigned long)the_mesh.getSecondsSinceLastRawUartByte());
     if (!the_mesh.hasFreshSample()) {
       Serial.println("ERR no fresh uart sample");
       return;
@@ -252,6 +260,17 @@ static void handleLocalCommand() {
                   ((double)the_mesh.getLastTemperatureX10()) / 10.0,
                   ((double)the_mesh.getLastBatteryMv()) / 1000.0,
                   (unsigned long)the_mesh.getSecondsSinceLastSample());
+    return;
+  }
+
+  if (strcmp(local_command, "!uart loop") == 0) {
+#ifdef ESP32
+    uart_input.print("MC,N=321,T=12.3,B=3.70\n");
+    uart_input.flush();
+    Serial.printf("UART loop sent on GPIO%d at %d baud\n", UART_READ_TX_PIN, UART_READ_BAUD);
+#else
+    Serial.println("ERR uart loop unsupported on this target");
+#endif
     return;
   }
 
@@ -288,7 +307,7 @@ void setup() {
 #elif defined(ESP32)
   SPIFFS.begin(true);
   store.begin();
-  uart_input.begin(UART_READ_BAUD, SERIAL_8N1, UART_READ_RX_PIN, -1);
+  uart_input.begin(UART_READ_BAUD, SERIAL_8N1, UART_READ_RX_PIN, UART_READ_TX_PIN);
 #endif
 
   the_mesh.begin(false);
@@ -303,7 +322,8 @@ void setup() {
   }
 #endif
 
-  Serial.println("UART sender ready. Expected line: MC,N=<id>,T=<temp_c>,B=<battery_v>");
+  Serial.printf("UART sender ready. RX=GPIO%d TX=GPIO%d Expected line: MC,N=<id>,T=<temp_c>,B=<battery_v>\n",
+                UART_READ_RX_PIN, UART_READ_TX_PIN);
 }
 
 void loop() {

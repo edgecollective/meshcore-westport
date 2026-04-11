@@ -17,7 +17,7 @@ static bool isStrictPrintable(int c) {
 
 UartReadSenderMesh::UartReadSenderMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTCClock& rtc, SimpleMeshTables& tables, DataStore& store)
   : MyMesh(radio, rng, rtc, tables, store), next_send_at(0), response_deadline(0), last_uart_sample_at(0),
-    last_request_tag(0), last_battery_mv(0), last_temperature_x10(0), node_id(0), target_valid(false),
+    last_raw_uart_byte_at(0), last_request_tag(0), raw_uart_byte_count(0), last_battery_mv(0), last_temperature_x10(0), node_id(0), last_raw_uart_byte(0), target_valid(false),
     awaiting_response(false), retry_pending(false), sample_valid(false), uart_line_discard(false), uart_line_len(0) {
   memset(target_pub_key, 0, sizeof(target_pub_key));
   memset(uart_line, 0, sizeof(uart_line));
@@ -92,6 +92,22 @@ void UartReadSenderMesh::pollUart(Stream& in) {
     if (c < 0) {
       return;
     }
+
+    raw_uart_byte_count++;
+    last_raw_uart_byte = (uint8_t)c;
+    last_raw_uart_byte_at = millis();
+
+    char raw_desc[12];
+    if (c == '\n') {
+      StrHelper::strncpy(raw_desc, "\\n", sizeof(raw_desc));
+    } else if (c == '\r') {
+      StrHelper::strncpy(raw_desc, "\\r", sizeof(raw_desc));
+    } else if (isStrictPrintable(c)) {
+      snprintf(raw_desc, sizeof(raw_desc), "%c", c);
+    } else {
+      snprintf(raw_desc, sizeof(raw_desc), "0x%02X", (unsigned)(uint8_t)c);
+    }
+    Serial.printf("UART BYTE: #%lu %s\n", (unsigned long)raw_uart_byte_count, raw_desc);
 
     if (c == '\r') {
       continue;
@@ -484,4 +500,12 @@ uint32_t UartReadSenderMesh::getSecondsSinceLastSample() const {
   }
 
   return (uint32_t)((millis() - last_uart_sample_at) / 1000UL);
+}
+
+uint32_t UartReadSenderMesh::getSecondsSinceLastRawUartByte() const {
+  if (raw_uart_byte_count == 0) {
+    return 0;
+  }
+
+  return (uint32_t)((millis() - last_raw_uart_byte_at) / 1000UL);
 }
