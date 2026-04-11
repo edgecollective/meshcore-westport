@@ -82,11 +82,7 @@ void SensorSenderMesh::loop() {
     return;
   }
 
-  if ((long)(now - next_send_at) >= 0) {
-    if (!sendSensorUpload(false)) {
-      next_send_at = now + nextSendDelayMillis();
-    }
-  }
+  // Sending is triggered by pollUart on each valid line, not by timer
 }
 
 void SensorSenderMesh::pollUart(Stream& in) {
@@ -115,6 +111,9 @@ void SensorSenderMesh::pollUart(Stream& in) {
                         (unsigned)node_id,
                         ((double)last_temperature_x10) / 10.0,
                         ((double)last_battery_mv) / 1000.0);
+          if (target_valid && !awaiting_response) {
+            sendSensorUpload(false);
+          }
         } else {
           Serial.printf("UART BAD: %s\n", last_status);
         }
