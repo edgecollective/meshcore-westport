@@ -1,22 +1,22 @@
 #include <Arduino.h>
 #include <Mesh.h>
 
-#include "UartReadSenderMesh.h"
+#include "UartSensorMesh.h"
 
 #if !defined(BLE_PIN_CODE)
-#error "companion_sensor_ble_uart_read requires BLE_PIN_CODE to be defined by the board environment"
+#error "companion_sensor_ble_uart_read_better requires BLE_PIN_CODE to be defined by the board environment"
 #endif
 
-#ifndef UART_READ_RX_PIN
-#define UART_READ_RX_PIN 6
+#ifndef UART_RX_PIN
+#define UART_RX_PIN 2
 #endif
 
-#ifndef UART_READ_BAUD
-#define UART_READ_BAUD 9600
+#ifndef UART_TX_PIN
+#define UART_TX_PIN -1
 #endif
 
-#ifndef UART_READ_TX_PIN
-#define UART_READ_TX_PIN 45
+#ifndef UART_BAUD
+#define UART_BAUD 9600
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -49,12 +49,12 @@
   #include <helpers/nrf52/SerialBLEInterface.h>
   SerialBLEInterface serial_interface;
 #else
-  #error "companion_sensor_ble_uart_read currently supports ESP32 and NRF52 BLE targets"
+  #error "companion_sensor_ble_uart_read_better currently supports ESP32 and NRF52 BLE targets"
 #endif
 
 StdRNG fast_rng;
 SimpleMeshTables tables;
-UartReadSenderMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store);
+UartSensorMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store);
 static char local_command[320];
 static unsigned long next_display_refresh = 0;
 
@@ -93,17 +93,13 @@ static void renderStatusScreen() {
   char line[48];
   char elapsed[12];
   display.setCursor(0, 24);
-  if (the_mesh.hasFreshSample()) {
-    formatElapsed(the_mesh.getSecondsSinceLastSample(), elapsed, sizeof(elapsed));
-    snprintf(line, sizeof(line), "Last: %s", elapsed);
-  } else {
-    snprintf(line, sizeof(line), "Last: none");
-  }
+  formatElapsed(the_mesh.getSecondsUntilNextSend(), elapsed, sizeof(elapsed));
+  snprintf(line, sizeof(line), "Next: %s", elapsed);
   display.print(line);
 
   display.setCursor(0, 36);
   snprintf(line, sizeof(line), "N:%u T:%.1f B:%.1f",
-           (unsigned)the_mesh.getLastNodeId(),
+           (unsigned)the_mesh.getNodeId(),
            ((double)the_mesh.getLastTemperatureX10()) / 10.0,
            ((double)the_mesh.getLastBatteryMv()) / 1000.0);
   display.print(line);
@@ -163,6 +159,8 @@ static void handleLocalCommand() {
   }
 
   if (strcmp(local_command, "!help") == 0) {
+    Serial.println("!nodeid show");
+    Serial.println("!nodeid set <number>");
     Serial.println("!self pubkey");
     Serial.println("!self card");
     Serial.println("!target import <meshcore://card>");
@@ -170,13 +168,36 @@ static void handleLocalCommand() {
     Serial.println("!target clear");
     Serial.println("!target show");
     Serial.println("!uart show");
-    Serial.println("!uart loop");
     return;
   }
 
   if (strcmp(local_command, "!self pubkey") == 0) {
     mesh::Utils::printHex(Serial, the_mesh.self_id.pub_key, PUB_KEY_SIZE);
     Serial.println();
+    return;
+  }
+
+  if (strcmp(local_command, "!nodeid show") == 0) {
+    Serial.println((unsigned)the_mesh.getNodeId());
+    return;
+  }
+
+  if (strncmp(local_command, "!nodeid set ", 12) == 0) {
+    char* value = &local_command[12];
+    while (*value == ' ') {
+      value++;
+    }
+
+    if (*value == 0) {
+      Serial.println("ERR missing node_id");
+      return;
+    }
+
+    if (the_mesh.setNodeId((uint16_t)strtoul(value, NULL, 10))) {
+      Serial.println("OK");
+    } else {
+      Serial.println("ERR unable to store node_id");
+    }
     return;
   }
 
@@ -251,26 +272,13 @@ static void handleLocalCommand() {
                   (unsigned)the_mesh.getLastRawUartByte(),
                   (unsigned long)the_mesh.getSecondsSinceLastRawUartByte());
     if (!the_mesh.hasFreshSample()) {
-      Serial.println("ERR no fresh uart sample");
-      return;
+      Serial.println("no fresh uart sample");
+    } else {
+      Serial.printf("node_id=%u temp_c=%.1f battery_v=%.3f\n",
+                    (unsigned)the_mesh.getNodeId(),
+                    ((double)the_mesh.getLastTemperatureX10()) / 10.0,
+                    ((double)the_mesh.getLastBatteryMv()) / 1000.0);
     }
-
-    Serial.printf("node_id=%u temp_c=%.1f battery_v=%.3f age_s=%lu\n",
-                  (unsigned)the_mesh.getLastNodeId(),
-                  ((double)the_mesh.getLastTemperatureX10()) / 10.0,
-                  ((double)the_mesh.getLastBatteryMv()) / 1000.0,
-                  (unsigned long)the_mesh.getSecondsSinceLastSample());
-    return;
-  }
-
-  if (strcmp(local_command, "!uart loop") == 0) {
-#ifdef ESP32
-    uart_input.print("MC,N=321,T=12.3,B=3.70\n");
-    uart_input.flush();
-    Serial.printf("UART loop sent on GPIO%d at %d baud\n", UART_READ_TX_PIN, UART_READ_BAUD);
-#else
-    Serial.println("ERR uart loop unsupported on this target");
-#endif
     return;
   }
 
@@ -307,7 +315,7 @@ void setup() {
 #elif defined(ESP32)
   SPIFFS.begin(true);
   store.begin();
-  uart_input.begin(UART_READ_BAUD, SERIAL_8N1, UART_READ_RX_PIN, UART_READ_TX_PIN);
+  uart_input.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
 #endif
 
   the_mesh.begin(false);
@@ -322,8 +330,8 @@ void setup() {
   }
 #endif
 
-  Serial.printf("UART sender ready. RX=GPIO%d TX=GPIO%d Expected line: MC,N=<id>,T=<temp_c>,B=<battery_v>\n",
-                UART_READ_RX_PIN, UART_READ_TX_PIN);
+  Serial.printf("UART sensor ready. RX=GPIO%d BAUD=%d Expected: MC,N=<id>,T=<temp_c>,B=<battery_v>\\n\n",
+                UART_RX_PIN, UART_BAUD);
 }
 
 void loop() {
